@@ -51,8 +51,10 @@ def smooth_pose_estimation(ids, rvecs, tvecs, pose_filter, pre_filter, post_filt
         
         # Use median filter to get rid of outliers or spike
         medfilt_input = list(pre_filter)
+        
         try:
-            post_filter = (scipy.signal.medfilt(medfilt_input, kernel_size = 5))
+            if len(medfilt_input)>4:
+                post_filter = (scipy.signal.medfilt(medfilt_input, kernel_size = 5))
         except Exception as e:
             print(e)
             

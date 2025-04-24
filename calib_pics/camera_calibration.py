@@ -92,7 +92,7 @@ def main():
   
   print("\n Distortion coefficient:") 
   print(dist) 
-    
+  print(ret)
   # Close all windows
   cv2.destroyAllWindows() 
       
