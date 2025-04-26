@@ -8,7 +8,7 @@ number_of_squares_X = 10 # Number of chessboard squares along the x-axis
 number_of_squares_Y = 7  # Number of chessboard squares along the y-axis
 nX = number_of_squares_X - 1 # Number of interior corners along x-axis
 nY = number_of_squares_Y - 1 # Number of interior corners along y-axis
-square_size = 0.023 # Size, in meters, of a square side 
+square_size = 0.0234 # Size, in meters, of a square side 
 
 # Set termination criteria. We stop either when an accuracy is reached or when
 # we have finished a certain number of iterations.
@@ -17,7 +17,7 @@ criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 # Define real world coordinates for points in the 3D coordinate frame
 # Object points are (0,0,0), (1,0,0), (2,0,0) ...., (5,8,0)
 object_points_3D = np.zeros((nX * nY, 3), np.float32)  
-  
+
 # These are the x and y coordinates                                              
 object_points_3D[:,:2] = np.mgrid[0:nY, 0:nX].T.reshape(-1, 2) 
  
@@ -73,7 +73,7 @@ def main():
                                                     gray.shape[::-1], 
                                                     None, 
                                                     None)
- 
+
   # Save parameters to a file
   cv_file = cv2.FileStorage('calibration_chessboard.yaml', cv2.FILE_STORAGE_WRITE)
   cv_file.write('K', mtx)
@@ -93,6 +93,14 @@ def main():
   print("\n Distortion coefficient:") 
   print(dist) 
   print(ret)
+
+  mean_error = 0
+  for i in range(len(object_points)):
+    imgpoints2, _ = cv2.projectPoints(object_points[i], rvecs[i], tvecs[i], mtx, dist)
+    error = cv2.norm(image_points[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+    mean_error += error
+
+  print( "total error: {}".format(mean_error/len(object_points)) )
   # Close all windows
   cv2.destroyAllWindows() 
       

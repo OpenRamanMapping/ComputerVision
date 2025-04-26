@@ -5,36 +5,10 @@ import math as m
 from config import *
 from kalman import *
 
-centre_of_frame = (int(FRAME_DIMENSIONS[0]/2),int(FRAME_DIMENSIONS[1]/2))
-
 centered = False
 
 pre_filter = deque(maxlen=5)
 post_filter = deque(maxlen=5)
-
-def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
-    '''
-    This will estimate the rvec and tvec for each of the marker corners detected by:
-       corners, ids, rejectedImgPoints = detector.detectMarkers(image)
-    corners - is an array of detected corners for each detected marker in the image
-    marker_size - is the size of the detected markers
-    mtx - is the camera matrix
-    distortion - is the camera distortion matrix
-    RETURN list of rvecs, tvecs, and trash (so that it corresponds to the old estimatePoseSingleMarkers())
-    '''
-    marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
-                              [marker_size / 2, marker_size / 2, 0],
-                              [marker_size / 2, -marker_size / 2, 0],
-                              [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
-    trash = []
-    rvecs = []
-    tvecs = []
-    for c in corners:
-        _, R, t = cv2.solvePnP(marker_points, c, mtx, distortion, False, cv2.SOLVEPNP_IPPE_SQUARE)
-        rvecs.append(R)
-        tvecs.append(t)
-        trash.append(_)
-    return rvecs, tvecs, trash
 
 #ARUCO
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
@@ -64,12 +38,34 @@ yaw_combined_list = []
 yaw_corrected = []
 yaw_real = []
 translation_z = 15
-
+median_roll = []
 # averaging distance
 counter = 0
 avg_translation = 0
 avg_translation_counter = 0
-
+def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
+    '''
+    This will estimate the rvec and tvec for each of the marker corners detected by:
+       corners, ids, rejectedImgPoints = detector.detectMarkers(image)
+    corners - is an array of detected corners for each detected marker in the image
+    marker_size - is the size of the detected markers
+    mtx - is the camera matrix
+    distortion - is the camera distortion matrix
+    RETURN list of rvecs, tvecs, and trash (so that it corresponds to the old estimatePoseSingleMarkers())
+    '''
+    marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, marker_size / 2, 0],
+                              [marker_size / 2, -marker_size / 2, 0],
+                              [-marker_size / 2, -marker_size / 2, 0]], dtype=np.float32)
+    trash = []
+    rvecs = []
+    tvecs = []
+    for c in corners:
+        _, R, t = cv2.solvePnP(marker_points, c, mtx, distortion, False, cv2.SOLVEPNP_IPPE_SQUARE)
+        rvecs.append(R)
+        tvecs.append(t)
+        trash.append(_)
+    return rvecs, tvecs, trash
 
 def vect_mag(v:tuple):
     mag = m.sqrt(v[0]*v[0] + v[1]*v[1])
@@ -109,11 +105,9 @@ def get_vectors(id_corners):
 
     return vectors
 
-
 while True:
 
     ret, frame = cap.read()
-    frame = cv2.resize(frame, FRAME_DIMENSIONS)
     
 	# if frame is read correctly ret is True
     if not ret:
@@ -124,8 +118,8 @@ while True:
     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     frame_blur = cv2.bilateralFilter(frame_gray, 9, 40, 40)
 
-    corners, ids, rejectedImgPoints = detector.detectMarkers(frame_blur)
-    
+    corners, ids, rejectedImgPoints = detector.detectMarkers(frame_gray)
+
     if ids is not None:
         
         ids = ids.flatten()
@@ -154,79 +148,90 @@ while True:
             smoothed_pose = smoothed_poses[i]
             tvec = tvecs[i]
             rvec = rvecs[i]
-            roll, yaw, pitch = rvecs[i]
-            print(roll, pitch, yaw)
+            roll, pitch, yaw = rvecs[i]
             # round values to 2 decimal places
-            roll = round(roll[0], 2)
-            pitch = round(pitch[0], 2)
-            yaw = round(yaw[0], 2)
+            # roll = round(roll[0], 2)
+            # pitch = round(pitch[0], 2)
+            # yaw = round(yaw[0], 2)
 
             print('1:', roll, pitch, yaw)
             # distances from tag in cm
             transform_translation_x = tvec[0] * 1000
             transform_translation_y = tvec[1] * 1000
-            translation_z = tvec[2] * 1000 - 16
-            rvecstest = [roll, pitch, yaw]
+            translation_z = tvec[2][0] * 1000
 
-            rvecstest = [r / 180 * m.pi for r in rvecstest]
-            rvecstest = np.array([[r] for r in rvecstest])
-            #pitch = -pitch
-            yaw_rad = (90-yaw) * m.pi / 180 
-
-            print(yaw_rad)
-            
-            # p1 = (int(id_corners[1][0] + 0.1 * ratios[1] * m.cos(yaw_rad)), int(id_corners[1][1] - 0.1 * ratios[1] * m.sin(yaw_rad) ))
-            #p1 = (int(id_corners[1][0] + 0.1 * ratios[0] * m.cos(yaw_rad)), int(id_corners[1][1] - 0.1 * ratios[0] * m.sin(yaw_rad) ))
-            # Starting point in 3D (origin of marker)
-            start_3d = np.array([[0, 0, 0]], dtype=np.float32)
-
-            # Direction vector in marker's local frame (e.g., X-axis)
-            # Let's say we want a line 10 cm long along X
             length = 0.1  # in meters (adjust to match your marker units)
-            end_3d = np.array([[0, length, 0]], dtype=np.float32)
+            marker_offset = 0.01
+
+            pre_filter.append(roll[0])
+            
+            # Use median filter to get rid of outliers or spike
+            medfilt_input = list(pre_filter)
+            
+            try:
+                if len(medfilt_input)>4:
+                    post_filter = (scipy.signal.medfilt(medfilt_input, kernel_size = 5))
+            except Exception as e:
+                print(e)
+                
+            # Save last angle after filtering
+            if len(post_filter)>4:
+                median_roll = post_filter[4] if post_filter[4]!=0 else post_filter[3]
+                rvec[0][0] = median_roll
+            
+            # Starting point in 3D 
+            start_1 = np.array([[-marker_offset, -marker_offset, 0]], dtype=np.float32)
+            end_1 = np.array([[-marker_offset, -marker_offset-0.13, 0]], dtype=np.float32)
+            end_2 = np.array([[length, -marker_offset-0.13, 0]], dtype=np.float32)
+            end_3 = np.array([[length-marker_offset, -marker_offset, 0]], dtype=np.float32)
 
             # Project both points to 2D image
-            pts_2d, _ = cv2.projectPoints(np.vstack([start_3d, end_3d]), rvec, tvec, mtx, dst)
-            pt1 = tuple(pts_2d[0].ravel().astype(int))
-            pt2 = tuple(pts_2d[1].ravel().astype(int))
-            cv2.line(frame, id_corners[2], pt2, (0, 255, 255), 2)
-            #cv2.line(frame, p1, p2, (0, 0, 255), 2, cv2.LINE_AA)
-            #cv2.line(frame, p2, p3, (0, 0, 255), 2, cv2.LINE_AA)
-            #cv2.line(frame, p3, id_corners[1], (0, 0, 255), 2, cv2.LINE_AA)
-
-            # vertices = [
-            #     id_corners[1],
-            #     p1,
-            #     p2,
-            #     p3
-            # ]
+            pts_1, _ = cv2.projectPoints(np.vstack([start_1, end_1]), rvec, tvec, mtx, dst)
+            pts_2, _ = cv2.projectPoints(np.vstack([start_1, end_2]), rvec, tvec, mtx, dst)
+            pts_3, _ = cv2.projectPoints(np.vstack([start_1, end_3]), rvec, tvec, mtx, dst)
             
-            # mask_black = np.zeros_like(frame_gray)
-
-            # vertices = np.array([vertices], np.int32)
-            # cv2.fillPoly(mask_black, vertices, 255)
-            # frame_lines = cv2.bitwise_and(mask_black, frame_blur)
+            pt1 = tuple(pts_1[0].ravel().astype(int))
+            pt2 = tuple(pts_1[1].ravel().astype(int))
+            pt3 = tuple(pts_2[1].ravel().astype(int))
+            pt4 = tuple(pts_3[1].ravel().astype(int))
             
-            lines = cv2.Canny(frame_blur, 200, 300)
-            lines = cv2.dilate(lines, np.ones((3, 3), np.uint8))
-            lines = cv2.erode(lines, np.ones((3, 3), np.uint8))
+            cv2.line(frame, pt1, pt2, (0, 255, 255), 2)
+            cv2.line(frame, pt2, pt3, (0, 255, 255), 2)
+            cv2.line(frame, pt3, pt4, (0, 255, 255), 2)
+            cv2.line(frame, pt4, pt1, (0, 255, 255), 2)
+
+            vertices = [
+                pt1, 
+                pt2, 
+                pt3,
+                pt4
+            ]
+            
+            mask_black = np.zeros_like(frame_gray)
+
+            vertices = np.array([vertices], np.int32)
+            cv2.fillPoly(mask_black, vertices, 255)
+            frame_lines = cv2.bitwise_and(mask_black, frame_blur)
+            
+            lines = cv2.Canny(frame_lines, 200, 300)
+            lines = cv2.dilate(lines, np.ones((5, 5), np.uint8))
+            #lines = cv2.erode(lines, np.ones((3, 3), np.uint8))
 
             if lines.any():
                 cv2.drawFrameAxes(frame, mtx, dst, rvecs[i], tvecs[i], 0.05) 
-                
                 avg_translation_counter += translation_z
 
                 counter +=1
                 if counter % 20 == 0:
                     avg_translation = avg_translation_counter / 20
-                    #print(f'Z translation: {avg_translation:.2f}, Roll: {roll:.2f}, Pitch: {pitch:.2f}, Yaw: {yaw:.2f}')
+                    print(f'Z translation: {avg_translation:.2f}')
                     avg_translation_counter, avg_translation = [0, 0]
 
                 try:
                     contours, hierarchy = cv2.findContours(lines, cv2.RETR_TREE ,cv2.CHAIN_APPROX_NONE)
                     if contours:
                         contour = max(contours, key = cv2.contourArea, default=0)
-                        #cv2.drawContours(frame, [contour], -1, (0, 255, 0), -1)
+                       # cv2.drawContours(frame, [contour], -1, (0, 255, 0), -1)
                         M = cv2.moments(contour)
                         
                         #for c in contour[0]:
@@ -238,7 +243,7 @@ while True:
                 except Exception as e:
                     print(e)
                     pass
-                cv2.imshow('lines', lines)    
+                cv2.imshow('lines', frame_lines)    
 
     cv2.imshow('frame', frame)
     if cv2.waitKey(1) == ord('q'):

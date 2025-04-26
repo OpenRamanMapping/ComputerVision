@@ -24,7 +24,7 @@ while True:
         break
     
     print(time_elapsed)
-    if time_elapsed != prev_time:
+    if time_elapsed != prev_time and time_elapsed%2:
         cv.imwrite(f"/home/david/Desktop/ComputerVision/calib_pics/pic{time_elapsed}.jpg", frame)
         print("time saved")
         prev_time = time_elapsed
