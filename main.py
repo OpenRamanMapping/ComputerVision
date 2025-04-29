@@ -22,18 +22,50 @@ cv_file.release()
 contours = []
 
 def distance(pt1, pt2):
+    '''
+    Returns euclidean distance between two points.
+    '''
+
     v = (pt2[0] - pt1[0], pt2[1] - pt1[1])
     return m.sqrt(v[0]*v[0] + v[1]*v[1])
 
 def midpoint(ptA, ptB):
-	return ((ptA[0] + ptB[0]) * 0.5, (ptA[1] + ptB[1]) * 0.5)
+    '''
+    Returns midpoint between two points.
+    '''
 
+    return ((ptA[0] + ptB[0]) * 0.5, (ptA[1] + ptB[1]) * 0.5)
+
+def get_lines(image, theshold_low = 200, threshold_high = 300):
+    '''
+    Returns lines from a grayscale frame.
+    '''
+
+    cv2.Canny(image, theshold_low, threshold_high)
+    lines = cv2.dilate(lines, None)
+    lines = cv2.erode(lines, None)
+    return lines
+
+def prep_frame_lines(plate):
+
+    plate_contours, _ = cv2.findContours(plate, cv2.RETR_TREE ,cv2.CHAIN_APPROX_SIMPLE)
+    if plate_contours:
+        plate_contour = max(plate_contours, key = cv2.contourArea, default=0) 
+        approx = cv2.approxPolyDP(plate_contour, 10, closed=True)
+        
+        mask_black = np.zeros_like(frame_blur)
+        vertices = np.array([approx], np.int32)
+        cv2.fillPoly(mask_black, vertices, 255)
+        frame_lines = cv2.bitwise_and(frame_gray, mask_black)
+    return frame_lines
 
 if __name__ == "__main__":
+
     while True:
         ret, frame_old = cap.read()
         cv2.imshow("old", frame_old)
         cv2.imwrite('frame_old1.jpg', frame_old)
+
         h = frame_old.shape[0]
         w = frame_old.shape[1]
 
@@ -79,25 +111,11 @@ if __name__ == "__main__":
         plate = cv2.adaptiveThreshold(
             frame_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 111, 15)
         
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
-        plate = cv2.morphologyEx(plate, cv2.MORPH_CLOSE, kernel, iterations=2)
-        try:
-            plate_contours, hierarchy = cv2.findContours(plate, cv2.RETR_TREE ,cv2.CHAIN_APPROX_SIMPLE)
-            if plate_contours:
-                plate_contour = max(plate_contours, key = cv2.contourArea, default=0) 
-                approx = cv2.approxPolyDP(plate_contour, 10, closed=True)
-                
-                mask_black = np.zeros_like(frame_blur)
-                vertices = np.array([approx], np.int32)
-                cv2.fillPoly(mask_black, vertices, 255)
-                frame_lines = cv2.bitwise_and(frame_gray, mask_black)
-
+        try: frame_lines = prep_frame_lines(plate)
         except Exception as e:
             print(e)
 
-        lines = cv2.Canny(frame_gray, 200, 300)
-        lines = cv2.dilate(lines, None)
-        lines = cv2.erode(lines, None)
+        lines = get_lines(frame_lines)
 
         if lines.any():
             cv2.imshow('lines2', lines)
