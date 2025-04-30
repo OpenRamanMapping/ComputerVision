@@ -65,14 +65,12 @@ if ids is not None:
     cv2.circle(frame, mid_marker1, 2, (255, 0, 0), -1)
     cv2.circle(frame, mid_marker2, 2, (255, 0, 0), -1)
     cv2.circle(frame, mid_marker3, 2, (255, 0, 0), -1)
-    
+
     perimeter = ARUCO_MARKER_SIZE * 4
-    print('p',distance(mid_marker0, mid_marker2))
     pix_perim = cv2.arcLength(corners[0], True)
+
     #ratio mm/pixels
     ratio = perimeter/pix_perim 
-
-contour_pts = []
 
 plate = cv2.adaptiveThreshold(
     frame_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 111, 15)
@@ -82,7 +80,7 @@ try:
     if plate_contours:
         plate_contour = max(plate_contours, key = cv2.contourArea, default=0) 
         approx = cv2.approxPolyDP(plate_contour, 10, closed=True)
-        
+
         mask_black = np.zeros_like(frame_blur)
         vertices = np.array([approx], np.int32)
         cv2.fillPoly(mask_black, vertices, 255)
@@ -114,8 +112,10 @@ if lines.any():
             box = cv2.boxPoints(rect)
             box = np.array(box, dtype="int")
             box = perspective.order_points(box)
-            time_start = timer()
+            (p1, p2, p3, p4) = box
 
+            time_start = timer()
+            
             # x_p, y_p, w_p, h_p = cv2.boundingRect(c)
             # for i in range(x_p, x_p + w_p):
             #     for j in range(y_p, y_p + h_p):
@@ -135,8 +135,6 @@ if lines.any():
 
             mask_black_cont = np.zeros((h, w), dtype=np.uint8)
             cv2.drawContours(mask_black_cont, [c], -1, color = 1, thickness=-1)
-
-            #print(timer() - time_start)
             
             if GAP_MM <= 0:
                 raise ValueError("gap cannot be 0 or less, choose continuous scanning instead")
@@ -156,9 +154,6 @@ if lines.any():
 
             contour_ones = ([(int(c[0]), int(c[1])) for c in contour_ones])
 
-            print(contour_ones)
-            #cv2.drawContours(frame, [contour_pts], -1, color = (0, 255, 0), thickness=-1)   
-
             for i in contour_ones:
                 frame[i] = (0, 255, 0)
 
@@ -171,8 +166,6 @@ if lines.any():
             #         frame[index] = (255, 0, 0)       
 
             # cv2.imshow("mask", mask_black_cont)
-
-            (p1, p2, p3, p4) = box
 
             mid_0 = [int(p) for p in midpoint(p1, p2)]
             mid_1 = [int(p) for p in midpoint(p2, p3)]
