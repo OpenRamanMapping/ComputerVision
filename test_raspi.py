@@ -12,7 +12,7 @@ from libcamera import controls, Transform
 import os
 
 picam2 = Picamera2()
-picam2.configure(picam2.create_video_configuration(transform = Transform(hflip=1, vflip=1)))
+picam2.configure(picam2.create_video_configuration(main = {"size": (640, 480)},transform = Transform(hflip=1, vflip=1)))
 picam2.start()
 
 #initiate ARUCO detection objects
@@ -22,7 +22,7 @@ detector = cv2.aruco.ArucoDetector(dictionary, detectorParams)
 
 # Load the camera calibration parameters from the saved file
 cv_file = cv2.FileStorage(
-    CAMERA_CALIBRATION_PARAMETERS_FILENAME, cv2.FILE_STORAGE_READ) 
+    "calibration_raspi.yaml", cv2.FILE_STORAGE_READ) 
 mtx = cv_file.getNode('K').mat()
 dst = cv_file.getNode('D').mat()
 cv_file.release()
@@ -59,7 +59,7 @@ def prep_frame_lines(plate, frame_blur, frame_gray):
         frame_lines = cv2.bitwise_and(frame_gray, mask_black)
     return frame_lines, plate_vertices
 
-def get_lines(image, theshold_low = 200, threshold_high = 250):
+def get_lines(image, theshold_low = 100, threshold_high = 120):
     '''
     Returns lines from a grayscale frame.
     '''
@@ -132,7 +132,7 @@ class Sample:
         Draws contours and dimensions of sample on frame
         '''
         size = self.size
-
+        size = sorted(size)
         error = (abs(real_size[0]-size[0])/real_size[0] + abs(real_size[1]-size[1])/real_size[1])/2*100
         
         print(f'size: {size[0]:10.2f} mm, {size[1]:10.2f} mm, error: {error:10.1f}')
@@ -175,7 +175,7 @@ if __name__ == "__main__":
             #print(corners[0][0])
 
         plate = cv2.adaptiveThreshold(
-            frame_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 111, 15)
+            frame_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 111, 15)
         
         try: 
             frame_lines, (x_box, y_box, w_box, h_box) = prep_frame_lines(plate, frame_blur, frame_gray)
@@ -193,7 +193,7 @@ if __name__ == "__main__":
                     #Filter out contours too large/too small
                     for c in contours:
                         print(cv2.contourArea(c))
-                    contours_filtered = [c for c in contours if 500<cv2.contourArea(c)<5000]
+                    contours_filtered = [c for c in contours if 500<cv2.contourArea(c)<20000]
                     #Filter contours by size
                     contours_sorted = sorted(contours_filtered, key = cv2.contourArea, reverse=True)
                     #Grab the first (largest) contour
@@ -205,7 +205,7 @@ if __name__ == "__main__":
                     #Measure size of object in mm
                     size = sample.get_size()
                     #Draw bounding rectangle of object and print size and error
-                    sample.draw_cont(real_size=(41.6, 48), frame = frame)
+                    sample.draw_cont(real_size=(41.7, 47.14), frame = frame)
                 
                     mask_black_cont = np.zeros((h, w), dtype=np.uint8)
                     cv2.drawContours(mask_black_cont, [c], -1, color = 1, thickness=-1)
