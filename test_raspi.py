@@ -12,9 +12,8 @@ from libcamera import controls, Transform
 import os
 
 picam2 = Picamera2()
-picam2.configure(picam2.create_video_configuration(main = {"size": (640, 480)}, transform = Transform(hflip=1, vflip=1)))
+picam2.configure(picam2.create_video_configuration(transform = Transform(hflip=1, vflip=1)))
 picam2.start()
-frame = picam2.capture_array()
 
 #initiate ARUCO detection objects
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
@@ -150,22 +149,17 @@ class Sample:
 if __name__ == "__main__":
 
     while True:
-        ret, frame_orig = cap.read()
-        
-        cv2.imwrite('frame_old1.jpg', frame_orig)
-
+        frame_orig = picam2.capture_array()
+        cv2.imwrite("sample_pic_rpi.jpg", frame_orig)
+        #frame_orig = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         h = frame_orig.shape[0]
         w = frame_orig.shape[1]
-
-        if not ret:
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
 
         newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
             mtx, dst, (w, h), 1, (w, h))
 
-        frame = cv2.undistort(frame_orig, mtx, dst, None, newcameramtx)
-        #frame = frame_orig
+        #frame = cv2.undistort(frame_orig, mtx, dst, None, newcameramtx)
+        frame = frame_orig
 
         #Operation on the frame
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -187,21 +181,24 @@ if __name__ == "__main__":
             frame_lines, (x_box, y_box, w_box, h_box) = prep_frame_lines(plate, frame_blur, frame_gray)
             
             lines = get_lines(frame_lines)
+            
         except Exception as e:
             print(e)
 
         if lines.any():
-            #cv2.imshow('lines2', lines)
+            cv2.imshow('lines2', lines)
             try:
                 contours, hierarchy = cv2.findContours(lines, cv2.RETR_TREE ,cv2.CHAIN_APPROX_NONE)
                 if contours:
                     #Filter out contours too large/too small
-                    contours_filtered = [c for c in contours if 500<cv2.contourArea(c)<15000]
+                    for c in contours:
+                        print(cv2.contourArea(c))
+                    contours_filtered = [c for c in contours if 500<cv2.contourArea(c)<5000]
                     #Filter contours by size
                     contours_sorted = sorted(contours_filtered, key = cv2.contourArea, reverse=True)
                     #Grab the first (largest) contour
                     c = contours_sorted[0]
-                                                
+
                     #Create sample object based on contour
                     sample = Sample(c)
 
@@ -213,7 +210,7 @@ if __name__ == "__main__":
                     mask_black_cont = np.zeros((h, w), dtype=np.uint8)
                     cv2.drawContours(mask_black_cont, [c], -1, color = 1, thickness=-1)
 
-                    frame_show = frame[y_box:y_box+h_box, x_box:x_box+w_box]
+                    #frame_show = frame[y_box:y_box+h_box, x_box:x_box+w_box]
 
                     if GAP_MM <= 0:
                         raise ValueError("gap cannot be 0 or less, choose continuous scanning instead")
@@ -235,15 +232,14 @@ if __name__ == "__main__":
                     #pprint(contour_ones)
                     for i in contour_ones:
                         frame[i] = (0, 255, 0)
-
+                    
             except Exception as e:
                 print('cont',e)
                 pass
             
-        cv2.imshow('frame', frame_show)
+        cv2.imshow('frame', frame)
         if cv2.waitKey(1) == ord('q'):
             break
 
     # When everything done, release the capture
-    cap.release()
     cv2.destroyAllWindows()
