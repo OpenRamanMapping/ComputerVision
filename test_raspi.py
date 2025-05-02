@@ -3,15 +3,23 @@ import cv2
 import math as m
 from imutils import perspective
 from config import *
-from pprint import pprint
+
+from picamera2 import Picamera2
+import time
+
+from libcamera import controls, Transform
+
+import os
+
+picam2 = Picamera2()
+picam2.configure(picam2.create_video_configuration(main = {"size": (640, 480)}, transform = Transform(hflip=1, vflip=1)))
+picam2.start()
+frame = picam2.capture_array()
 
 #initiate ARUCO detection objects
 dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 detectorParams = cv2.aruco.DetectorParameters()
 detector = cv2.aruco.ArucoDetector(dictionary, detectorParams)
-
-#initiate camera stream
-cap = cv2.VideoCapture(0)
 
 # Load the camera calibration parameters from the saved file
 cv_file = cv2.FileStorage(
