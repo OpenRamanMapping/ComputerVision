@@ -10,6 +10,8 @@ dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 detectorParams = cv2.aruco.DetectorParameters()
 detector = cv2.aruco.ArucoDetector(dictionary, detectorParams)
 
+home_position = (266, 71)
+
 #initiate camera stream
 cap = cv2.VideoCapture(4)
 
@@ -70,23 +72,22 @@ class Marker:
         '''
         Returns ratio of pixels to mm
         '''
-        mid_marker0 = [int(p) for p in midpoint(corners[0][0][0], corners[0][0][1])]
-        mid_marker1 = [int(p) for p in midpoint(corners[0][0][1], corners[0][0][2])]
-        mid_marker2 = [int(p) for p in midpoint(corners[0][0][2], corners[0][0][3])]
-        mid_marker3 = [int(p) for p in midpoint(corners[0][0][3], corners[0][0][0])]
-        cv2.circle(frame, mid_marker1, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker2, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker3, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker0, 2, (255, 0, 0), -1)
+        self.mid_marker0 = [int(p) for p in midpoint(corners[0][0][0], corners[0][0][1])]
+        self.mid_marker1 = [int(p) for p in midpoint(corners[0][0][1], corners[0][0][2])]
+        self.mid_marker2 = [int(p) for p in midpoint(corners[0][0][2], corners[0][0][3])]
+        self.mid_marker3 = [int(p) for p in midpoint(corners[0][0][3], corners[0][0][0])]
+        cv2.circle(frame, self.mid_marker1, 2, (255, 0, 0), -1)
+        cv2.circle(frame, self.mid_marker2, 2, (255, 0, 0), -1)
+        cv2.circle(frame, self.mid_marker3, 2, (255, 0, 0), -1)
+        cv2.circle(frame, self.mid_marker0, 2, (255, 0, 0), -1)
         
         perimeter = self.size * 4
         
         pix_perim = cv2.arcLength(corners[0], True)
         
-        ratio = (perimeter*1000)/pix_perim
-        print('ratio ', ratio)
+        ratio = perimeter/pix_perim
+        
         return ratio
-    
     def get_center(self):
         '''
         Returns center position of ArUco marker
@@ -94,7 +95,7 @@ class Marker:
         center = (int((self.mid_marker0[0]+self.mid_marker2[0])/2), int((self.mid_marker1[1]+self.mid_marker3[1])/2))
 
         return center
-
+        
 class Sample:
     def __init__(self, contour):
         self.contour = contour
@@ -156,7 +157,7 @@ if __name__ == "__main__":
 
         h = frame_orig.shape[0]
         w = frame_orig.shape[1]
-
+        cv2.circle(frame_orig, (int(w/2), int(h/2)), 3, (255, 0, 255), -1)
         if not ret:
             print("Can't receive frame (stream end?). Exiting ...")
             break
@@ -178,67 +179,12 @@ if __name__ == "__main__":
             ids = ids.flatten()
             marker = Marker(corners, ARUCO_MARKER_SIZE)
             ratio = marker.get_ratio()
+            center = marker.get_center()
+            print(center)
+            difference_mm = ((home_position[0]-center[0])*1000*ratio, (home_position[1]-center[1])*1000*ratio)
+            print(difference_mm)
+            cv2.circle(frame, center, 2, (0, 255, 255), -1)
             #print(corners[0][0])
-
-        plate = cv2.adaptiveThreshold(
-            frame_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 111, 25)
-        
-        try: 
-            frame_lines, (x_box, y_box, w_box, h_box) = prep_frame_lines(plate, frame_blur, frame_gray)
-            cv2.imshow('lines', plate)
-            lines = get_lines(frame_lines)
-        except Exception as e:
-            print(e)
-
-        if lines.any():
-            #cv2.imshow('lines2', lines)
-            try:
-                contours, hierarchy = cv2.findContours(lines, cv2.RETR_TREE ,cv2.CHAIN_APPROX_NONE)
-                if contours:
-                    #Filter out contours too large/too small
-                    contours_filtered = [c for c in contours if 500<cv2.contourArea(c)<15000]
-                    #Filter contours by size
-                    contours_sorted = sorted(contours_filtered, key = cv2.contourArea, reverse=True)
-                    #Grab the first (largest) contour
-                    c = contours_sorted[0]
-                                                
-                    #Create sample object based on contour
-                    sample = Sample(c)
-
-                    #Measure size of object in mm
-                    size = sample.get_size()
-                    #Draw bounding rectangle of object and print size and error
-                    sample.draw_cont(real_size=(41.6, 48), frame = frame)
-                
-                    mask_black_cont = np.zeros((h, w), dtype=np.uint8)
-                    cv2.drawContours(mask_black_cont, [c], -1, color = 1, thickness=-1)
-
-                    frame_show = frame[y_box:y_box+h_box, x_box:x_box+w_box]
-                    frame_show = cv2.resize(frame_show, (640, 480))
-                    cv2.imshow('show', frame_show)
-
-                    gap_pix = round(1/ratio)
-
-                    mask_scan = np.zeros((h, w), dtype=np.uint8)
-
-                    for i in range(0, h, gap_pix):
-                        for j in range(0, w, gap_pix):
-                            index = (i, j)
-                            if mask_black_cont[index]:
-                                mask_scan[index] = 1          
-
-                    y_shape, x_shape = np.where(mask_scan == 1)
-                    contour_ones = list(zip(y_shape, x_shape))     
-
-                    contour_ones = ([(int(c[0]), int(c[1])) for c in contour_ones])
-                    
-                    #pprint(contour_ones)
-                    for i in contour_ones:
-                        frame[i] = (0, 255, 0)
-
-            except Exception as e:
-                print('cont',e)
-                pass
             
         cv2.imshow('frame', frame)
         if cv2.waitKey(1) == ord('q'):
