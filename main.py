@@ -69,16 +69,7 @@ class Marker:
     def get_ratio(self):
         '''
         Returns ratio of pixels to mm
-        '''
-        mid_marker0 = [int(p) for p in midpoint(corners[0][0][0], corners[0][0][1])]
-        mid_marker1 = [int(p) for p in midpoint(corners[0][0][1], corners[0][0][2])]
-        mid_marker2 = [int(p) for p in midpoint(corners[0][0][2], corners[0][0][3])]
-        mid_marker3 = [int(p) for p in midpoint(corners[0][0][3], corners[0][0][0])]
-        cv2.circle(frame, mid_marker1, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker2, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker3, 2, (255, 0, 0), -1)
-        cv2.circle(frame, mid_marker0, 2, (255, 0, 0), -1)
-        
+        '''      
         perimeter = self.size * 4
         
         pix_perim = cv2.arcLength(corners[0], True)
@@ -91,6 +82,15 @@ class Marker:
         '''
         Returns center position of ArUco marker
         '''
+        mid_marker0 = [int(p) for p in midpoint(corners[0][0][0], corners[0][0][1])]
+        mid_marker1 = [int(p) for p in midpoint(corners[0][0][1], corners[0][0][2])]
+        mid_marker2 = [int(p) for p in midpoint(corners[0][0][2], corners[0][0][3])]
+        mid_marker3 = [int(p) for p in midpoint(corners[0][0][3], corners[0][0][0])]
+        cv2.circle(frame, mid_marker1, 2, (255, 0, 0), -1)
+        cv2.circle(frame, mid_marker2, 2, (255, 0, 0), -1)
+        cv2.circle(frame, mid_marker3, 2, (255, 0, 0), -1)
+        cv2.circle(frame, mid_marker0, 2, (255, 0, 0), -1)
+        
         center = (int((self.mid_marker0[0]+self.mid_marker2[0])/2), int((self.mid_marker1[1]+self.mid_marker3[1])/2))
 
         return center
